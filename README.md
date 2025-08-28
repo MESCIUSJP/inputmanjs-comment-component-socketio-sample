@@ -1,0 +1,2 @@
+# inputmanjs-comment-component-socketio-sample
+InputManJSのコメントコンポーネントでSocket.IOを使用してリアルタイム双方向通信を行うサンプルです。
