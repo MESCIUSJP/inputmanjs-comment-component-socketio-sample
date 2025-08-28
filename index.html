@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Comment Application</title>
+    <link href="https://cdn.mescius.com/inputmanjs/hosted/comment/css/gc.inputman.comment.css" rel="stylesheet">
+    <script src="https://cdn.mescius.com/inputmanjs/hosted/comment/scripts/gc.inputman.comment.ja.js"></script>
+    <script src="assets/socket.io.js"></script>
+</head>
+
+<body>
+    <div id="gcComment"></div>
+    <script>
+        // URL定義
+        const baseURL = window.location.origin;
+        const commentURL = `${baseURL}/comments`;
+        const userURL = `${baseURL}/users`;
+        const reactionURL = `${baseURL}/reactions`;
+
+        // socketioを初期化
+        const socket = io();
+        let gcComment = null;
+
+        // サーバーと接続を確立
+        socket.on('connect', () => {
+            gcComment = new GC.InputMan.GcComment(document.getElementById('gcComment'), {
+                commentMode: GC.InputMan.GcCommentMode.ChatMode,
+                dataSource: {
+                    enabled: true,
+                    remote: {
+                        comments: {
+                            read: { url: commentURL },
+                            create: { url: commentURL, requestData: { socketId: socket.id } },
+                            update: { url: commentURL, requestData: { socketId: socket.id } },
+                            delete: { url: commentURL, requestData: { socketId: socket.id } }
+                        },
+                        users: {
+                            read: { url: userURL }
+                        },
+                        reactions: {
+                            read: { url: reactionURL },
+                            create: { url: reactionURL, requestData: { socketId: socket.id } },
+                            delete: { url: reactionURL, requestData: { socketId: socket.id } }
+                        }
+                    }
+                },
+                addCommentEditorPosition: GC.InputMan.GcCommentEditorPosition.Top,
+                userInfo: {
+                    id: '0',
+                    name: "森上 偉久馬",
+                    avatar: 'https://demo.mescius.jp/inputmanjs/demos/ja/samples/comment/commentMode/threadMode/img/avatar1.png',
+                    avatarType: 'square',
+                }
+            });
+        });
+
+        /**
+         * サーバー側で定義されているcommentupdatedおよびreactionupdatedイベントの発火を検知します。
+         * クライアント側は最新のコメント/リアクションの状態をサーバー側と同期する必要があります。
+         * DataSourceを使用しているため、コメントやリアクションの追加、更新、削除の操作は既にサーバー側で処理されています。再度サーバーに送信する必要はありません。
+         * ここではサーバー側で更新した内容を他のクライアント側に通知する処理になります。
+         */
+
+        // サーバー側で定義されているcommentupdatedイベントの発火を検知します。
+        socket.on('commentupdated', (msg) => {
+            handleCommentsChange(msg);
+        });
+
+        //  サーバー側で定義されているreactionupdatedイベントの発火を検知します。
+        socket.on('reactionupdated', (msg) => {
+            handleReactionChange(msg);
+        });
+
+        function handleCommentsChange(msg) {
+            switch (msg.type) {
+                case 'add':
+                    gcComment.execCommand(GC.InputMan.GcCommentCommand.AddCommentElement, {
+                        comment: {
+                            ...msg.comment,
+                            postTime: new Date(msg.comment.postTime),
+                            updateTime: new Date(msg.comment.updateTime),
+                        },
+                        scrollIntoView: true
+                    });
+                    break;
+
+                case 'delete':
+                    gcComment.execCommand(GC.InputMan.GcCommentCommand.DeleteCommentElement, {
+                        commentId: msg.comment.id
+                    });
+                    break;
+
+                case 'update':
+                    const comment = getComment(gcComment.comments, msg.comment.id);
+                    if (comment) {
+                        gcComment.execCommand(GC.InputMan.GcCommentCommand.UpdateCommentElement, {
+                            comment: {
+                                ...comment,
+                                content: msg.comment.content,
+                                updateTime: new Date(msg.comment.updateTime)
+                            }
+                        });
+                    }
+                    break;
+
+                default:
+                    return;
+            }
+        }
+
+        function handleReactionChange(msg) {
+            console.log(msg);
+            const comment = getComment(gcComment.comments, msg.commentId);
+            if (comment) {
+                console.log(msg.reactionInfo);
+                gcComment.execCommand(GC.InputMan.GcCommentCommand.UpdateCommentElement, {
+                    comment: {
+                        ...comment,
+                        reactions: msg.reactionInfo
+                    },
+                });
+            }
+
+        }
+
+        function getComment(comments, commentId) {
+            for (let i = 0; i < comments.length; i++) {
+                if (comments[i].id === commentId) {
+                    return comments[i];
+                }
+                if (Array.isArray(comments[i].replies)) {
+                    const res = getComment(comments[i].replies, commentId);
+                    if (res) return res;
+                }
+            }
+            return null;
+        }
+    </script>
+</body>
+
+</html>
